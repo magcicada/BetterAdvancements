@@ -30,6 +30,8 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
     private final Map<Advancement, BetterAdvancementTab> tabs = Maps.newLinkedHashMap();
     private BetterAdvancementTab selectedTab;
     private static int tabPage, maxPages;
+    private Button previousPageButton;
+    private Button nextPageButton;
     private float zoom = MIN_ZOOM;
     private boolean isScrolling;
     protected int internalWidth, internalHeight;
@@ -63,23 +65,35 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
         }
 
         int left = SIDE + (width - internalWidth) / 2;
-        int top = TOP + (height - internalHeight) / 2;
-
         int right = internalWidth - SIDE + (width - internalWidth) / 2;
-        int bottom = internalHeight - SIDE + (height - internalHeight) / 2;
+        int bottom = internalHeight - BOTTOM + (height - internalHeight) / 2;
 
-        int width = right - left;
-        int height = bottom - top;
+        this.previousPageButton = addRenderableWidget(Button.builder(Component.literal("<"),
+                button -> changeTabPage(-1)).pos(left, bottom + 4).size(20, 20).build());
+        this.nextPageButton = addRenderableWidget(Button.builder(Component.literal(">"),
+                button -> changeTabPage(1)).pos(right - 20, bottom + 4).size(20, 20).build());
+        this.refreshPagination();
+    }
 
-        int maxTabs = BetterAdvancementTabType.getMaxTabs(width, height);
+    private int getTabsPerPage() {
+        return Math.max(1, BetterAdvancementTabType.getMaxTabs(
+                internalWidth - 2 * SIDE, internalHeight - TOP - BOTTOM));
+    }
 
-        if (this.tabs.size() > maxTabs) {
-
-            addRenderableWidget(Button.builder(Component.literal("<"), b -> tabPage = Math.max(tabPage - 1, 0)).pos(left, bottom + 4).size(20, 20).build());
-            addRenderableWidget(Button.builder(Component.literal(">"), b -> tabPage = Math.min(tabPage + 1, maxPages)).pos(right - 20, bottom + 4).size(20, 20).build());
-            maxPages = this.tabs.size() / maxTabs;
-            tabPage = Math.min(tabPage, maxPages);
+    private void refreshPagination() {
+        maxPages = Math.max(0, this.tabs.size() - 1) / this.getTabsPerPage();
+        tabPage = Math.max(0, Math.min(tabPage, maxPages));
+        if (this.previousPageButton != null && this.nextPageButton != null) {
+            this.previousPageButton.visible = maxPages > 0;
+            this.nextPageButton.visible = maxPages > 0;
+            this.previousPageButton.active = tabPage > 0;
+            this.nextPageButton.active = tabPage < maxPages;
         }
+    }
+
+    private void changeTabPage(int direction) {
+        tabPage += direction;
+        this.refreshPagination();
     }
 
     /**
@@ -97,21 +111,21 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int modifiers) {
-        if (modifiers == 0) {
+        if (modifiers == 0 && this.tabs.size() > 1) {
             int left = SIDE + (width - internalWidth) / 2;
             int top = TOP + (height - internalHeight) / 2;
 
             int right = internalWidth - SIDE + (width - internalWidth) / 2;
-            int bottom = internalHeight - SIDE + (height - internalHeight) / 2;
+            int bottom = internalHeight - BOTTOM + (height - internalHeight) / 2;
 
             int width = right - left;
             int height = bottom - top;
 
-            int maxTabs = BetterAdvancementTabType.getMaxTabs(width, height);
+            int maxTabs = this.getTabsPerPage();
             int skip = tabPage * maxTabs;
 
             for (BetterAdvancementTab tab : this.tabs.values().stream().skip(skip).limit(maxTabs).toList()) {
-                if (tab.isMouseOver(left, top, internalWidth - 2*SIDE, internalHeight - top - BOTTOM, mouseX, mouseY)) {
+                if (tab.isMouseOver(left, top, width, height, mouseX, mouseY)) {
                     this.clientAdvancements.setSelectedTab(tab.getAdvancement(), true);
                     break;
                 }
@@ -199,19 +213,16 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
         int top = TOP + (height - internalHeight) / 2;
 
         int right = internalWidth - SIDE + (width - internalWidth) / 2;
-        int bottom = internalHeight - SIDE + (height - internalHeight) / 2;
+        int bottom = internalHeight - BOTTOM + (height - internalHeight) / 2;
 
-        int width = right - left;
-        int height = bottom - top;
-
-        int maxTabs = BetterAdvancementTabType.getMaxTabs(width, height);
+        int maxTabs = this.getTabsPerPage();
         int skip = tabPage * maxTabs;
 
         this.renderBackground(guiGraphics);
         if (maxPages != 0) {
             Component page = Component.literal(String.format("%d / %d", tabPage + 1, maxPages + 1));
             int textWidth = this.font.width(page);
-            guiGraphics.drawString(this.font, page.getVisualOrderText(), left + (internalWidth - textWidth) / 2 - textWidth, bottom + 8, -1);
+            guiGraphics.drawString(this.font, page.getVisualOrderText(), (left + right - textWidth) / 2, bottom + 8, -1);
             super.render(guiGraphics, mouseX, mouseY, partialTicks);
         }
         this.renderInside(guiGraphics, mouseX, mouseY, left, top, right, bottom, maxTabs, skip);
@@ -457,10 +468,11 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
 
     @Override
     public void onAddAdvancementRoot(Advancement advancement) {
-        BetterAdvancementTab betterAdvancementTabGui = BetterAdvancementTab.create(this.minecraft, this, this.tabs.size(), advancement, internalWidth - 2*SIDE, internalHeight - TOP - SIDE);
+        BetterAdvancementTab betterAdvancementTabGui = BetterAdvancementTab.create(this.minecraft, this, this.tabs.size(), advancement, internalWidth - 2 * SIDE, internalHeight - TOP - BOTTOM);
 
         if (betterAdvancementTabGui != null) {
             this.tabs.put(advancement, betterAdvancementTabGui);
+            this.refreshPagination();
         }
     }
 
@@ -498,13 +510,23 @@ public class BetterAdvancementsScreen extends Screen implements ClientAdvancemen
         this.selectedTab = this.tabs.get(advancement);
         if (this.selectedTab != null) {
             this.selectedTab.loadScroll(internalWidth - 2 * SIDE - 3 * PADDING, internalHeight - TOP - BOTTOM - 3 * PADDING);
+            int index = 0;
+            for (BetterAdvancementTab tab : this.tabs.values()) {
+                if (tab == this.selectedTab) {
+                    tabPage = index / this.getTabsPerPage();
+                    break;
+                }
+                index++;
+            }
         }
+        this.refreshPagination();
     }
 
     @Override
     public void onAdvancementsCleared() {
         this.tabs.clear();
         this.selectedTab = null;
+        this.refreshPagination();
     }
 
     public BetterAdvancementWidget getAdvancementWidget(Advancement advancement) {
