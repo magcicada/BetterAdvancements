@@ -134,36 +134,32 @@ public class CriterionGrid {
             cellWidths[i] = font.width(cellContents.get(i));
         }
 
-        int numCols = 0;
+        if (cellContents.isEmpty()) {
+            return CriterionGrid.empty;
+        }
+
+        // Keep a valid single-column fallback even when one entry is wider than maxWidth.
+        int numCols = 1;
         int numPages = 1;
-        CriterionGrid prevGrid = null;
-        CriterionGrid currGrid = null;
-        // Optimise columns
-        do {
-            numCols++;
-            CriterionGrid newGrid = new CriterionGrid(cellContents, cellWidths, font.lineHeight, numCols, numPages);
-            if (prevGrid != null && newGrid.numRows == prevGrid.numRows) {
-                // We increased the width without decreasing the height, which is pointless.
+        CriterionGrid currGrid = new CriterionGrid(cellContents, cellWidths, font.lineHeight, numCols, numPages);
+        currGrid.init();
+        for (int candidateCols = 2; candidateCols <= cellContents.size(); candidateCols++) {
+            CriterionGrid candidate = new CriterionGrid(cellContents, cellWidths, font.lineHeight, candidateCols, numPages);
+            candidate.init();
+            if (candidate.width > maxWidth) {
                 continue;
             }
-            newGrid.init();
-            prevGrid = currGrid;
-            currGrid = newGrid;
-        } while(numCols <= cellContents.size() && currGrid.width <= maxWidth);
-        numCols--; // Decrease numCols as it will be one above what is accepted
-        currGrid = prevGrid; // Make sure
-        prevGrid = null; // Reset prevGrid before we work on pages
-        // If needed further optimise for pages
-        while(numPages <= cellContents.size() && currGrid.height > maxHeight) {
+            if (candidate.numRows < currGrid.numRows) {
+                currGrid = candidate;
+                numCols = candidateCols;
+            }
+        }
+
+        // Even a viewport shorter than one line must produce a valid, finite layout.
+        while (numPages < cellContents.size() && currGrid.height > maxHeight) {
             numPages++;
-            CriterionGrid newGrid = new CriterionGrid(cellContents, cellWidths, font.lineHeight, numCols, numPages);
-            if (prevGrid != null && newGrid.numRows == prevGrid.numRows) {
-                // We increased the pages without decreasing the height, which is pointless.
-                continue;
-            }
-            newGrid.init();
-            prevGrid = currGrid;
-            currGrid = newGrid;
+            currGrid = new CriterionGrid(cellContents, cellWidths, font.lineHeight, numCols, numPages);
+            currGrid.init();
         }
         return currGrid;
     }
