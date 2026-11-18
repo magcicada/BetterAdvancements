@@ -25,10 +25,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        run: ./gradlew :forge:build --no-daemon
+        run: ./gradlew :Forge:build --no-daemon
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: BetterAdvancements
-          path: "**/build/libs/*.jar"
+          name: BetterAdvancements-Forge
+          path: |
+            output/BetterAdvancements-Forge-*.jar
+            !output/*-dev.jar
+            !output/*-dev-shadow.jar
+            !output/*-sources.jar
+            !output/*-api.jar
+          if-no-files-found: error
